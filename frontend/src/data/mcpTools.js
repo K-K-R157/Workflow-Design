@@ -1,0 +1,412 @@
+import {
+  Bot, Globe, Code, FileText, Send, Database, FileJson,
+  Scissors, ArrowRightLeft, Filter, Layers, Mail, Webhook,
+  FileOutput, GitBranch, Repeat, UserCheck, Merge, Search,
+  Cpu, Zap, MessageSquare, Shield, Clock
+} from 'lucide-react';
+
+const mcpTools = [
+  // ─── Agent Tools ───
+  {
+    id: 'llm-call',
+    name: 'LLM Call',
+    category: 'agent',
+    icon: Bot,
+    premium: true,
+    description: 'Invoke a large language model with a prompt and get a completion response.',
+    requiredApiKeys: ['openai', 'anthropic', 'google'],
+    inputs: [
+      { id: 'prompt', name: 'Prompt', type: 'string', required: true },
+      { id: 'context', name: 'Context', type: 'string', required: false },
+    ],
+    outputs: [
+      { id: 'response', name: 'Response', type: 'string' },
+      { id: 'tokens', name: 'Token Count', type: 'number' },
+    ],
+    configFields: [
+      { key: 'model', label: 'Model', type: 'select', options: ['gpt-4o', 'gpt-4o-mini', 'claude-3.5-sonnet', 'gemini-pro'], default: 'gpt-4o' },
+      { key: 'temperature', label: 'Temperature', type: 'number', min: 0, max: 2, step: 0.1, default: 0.7 },
+      { key: 'maxTokens', label: 'Max Tokens', type: 'number', min: 1, max: 128000, default: 4096 },
+      { key: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: '' },
+    ],
+  },
+  {
+    id: 'web-search',
+    name: 'Web Search',
+    category: 'agent',
+    icon: Search,
+    premium: true,
+    description: 'Search the web using a query and return relevant results.',
+    requiredApiKeys: ['serpapi'],
+    inputs: [
+      { id: 'query', name: 'Query', type: 'string', required: true },
+    ],
+    outputs: [
+      { id: 'results', name: 'Results', type: 'array' },
+      { id: 'count', name: 'Result Count', type: 'number' },
+    ],
+    configFields: [
+      { key: 'maxResults', label: 'Max Results', type: 'number', min: 1, max: 50, default: 10 },
+      { key: 'safeSearch', label: 'Safe Search', type: 'toggle', default: true },
+    ],
+  },
+  {
+    id: 'code-executor',
+    name: 'Code Executor',
+    category: 'agent',
+    icon: Code,
+    premium: false,
+    description: 'Execute code in a sandboxed environment and return results.',
+    inputs: [
+      { id: 'code', name: 'Code', type: 'string', required: true },
+      { id: 'inputs', name: 'Inputs', type: 'object', required: false },
+    ],
+    outputs: [
+      { id: 'result', name: 'Result', type: 'any' },
+      { id: 'stdout', name: 'Stdout', type: 'string' },
+      { id: 'stderr', name: 'Stderr', type: 'string' },
+    ],
+    configFields: [
+      { key: 'language', label: 'Language', type: 'select', options: ['python', 'javascript', 'typescript'], default: 'python' },
+      { key: 'timeout', label: 'Timeout (s)', type: 'number', min: 1, max: 300, default: 30 },
+    ],
+  },
+  {
+    id: 'file-reader',
+    name: 'File Reader',
+    category: 'agent',
+    icon: FileText,
+    premium: false,
+    description: 'Read and parse files from storage or URLs.',
+    inputs: [
+      { id: 'path', name: 'File Path', type: 'string', required: true },
+    ],
+    outputs: [
+      { id: 'content', name: 'Content', type: 'string' },
+      { id: 'metadata', name: 'Metadata', type: 'object' },
+    ],
+    configFields: [
+      { key: 'encoding', label: 'Encoding', type: 'select', options: ['utf-8', 'ascii', 'base64'], default: 'utf-8' },
+      { key: 'parseFormat', label: 'Parse As', type: 'select', options: ['raw', 'json', 'csv', 'markdown'], default: 'raw' },
+    ],
+  },
+
+  // ─── Data Tools ───
+  {
+    id: 'http-request',
+    name: 'HTTP Request',
+    category: 'data',
+    icon: Globe,
+    premium: false,
+    description: 'Make HTTP requests to external APIs and services.',
+    inputs: [
+      { id: 'url', name: 'URL', type: 'string', required: true },
+      { id: 'body', name: 'Request Body', type: 'object', required: false },
+    ],
+    outputs: [
+      { id: 'response', name: 'Response', type: 'object' },
+      { id: 'status', name: 'Status Code', type: 'number' },
+      { id: 'headers', name: 'Headers', type: 'object' },
+    ],
+    configFields: [
+      { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], default: 'GET' },
+      { key: 'headers', label: 'Headers', type: 'textarea', default: '{}' },
+      { key: 'timeout', label: 'Timeout (ms)', type: 'number', min: 100, max: 60000, default: 5000 },
+    ],
+  },
+  {
+    id: 'database-query',
+    name: 'Database Query',
+    category: 'data',
+    icon: Database,
+    premium: true,
+    description: 'Execute database queries and return structured results.',
+    requiredApiKeys: ['database'],
+    inputs: [
+      { id: 'query', name: 'Query', type: 'string', required: true },
+      { id: 'params', name: 'Parameters', type: 'object', required: false },
+    ],
+    outputs: [
+      { id: 'rows', name: 'Rows', type: 'array' },
+      { id: 'count', name: 'Row Count', type: 'number' },
+    ],
+    configFields: [
+      { key: 'connection', label: 'Connection', type: 'select', options: ['postgresql', 'mysql', 'mongodb', 'sqlite'], default: 'postgresql' },
+      { key: 'database', label: 'Database Name', type: 'text', default: '' },
+    ],
+  },
+  {
+    id: 'json-parser',
+    name: 'JSON Parser',
+    category: 'data',
+    icon: FileJson,
+    premium: false,
+    description: 'Parse, transform, and extract data from JSON structures.',
+    inputs: [
+      { id: 'data', name: 'JSON Data', type: 'string', required: true },
+    ],
+    outputs: [
+      { id: 'parsed', name: 'Parsed Object', type: 'object' },
+      { id: 'keys', name: 'Keys', type: 'array' },
+    ],
+    configFields: [
+      { key: 'jsonPath', label: 'JSON Path', type: 'text', default: '$' },
+      { key: 'strict', label: 'Strict Mode', type: 'toggle', default: true },
+    ],
+  },
+
+  // ─── Transform Tools ───
+  {
+    id: 'text-splitter',
+    name: 'Text Splitter',
+    category: 'transform',
+    icon: Scissors,
+    premium: false,
+    description: 'Split text into chunks by delimiter, tokens, or semantic boundaries.',
+    inputs: [
+      { id: 'text', name: 'Text', type: 'string', required: true },
+    ],
+    outputs: [
+      { id: 'chunks', name: 'Chunks', type: 'array' },
+      { id: 'count', name: 'Chunk Count', type: 'number' },
+    ],
+    configFields: [
+      { key: 'method', label: 'Split Method', type: 'select', options: ['delimiter', 'tokens', 'sentences', 'paragraphs'], default: 'sentences' },
+      { key: 'chunkSize', label: 'Chunk Size', type: 'number', min: 1, max: 10000, default: 500 },
+      { key: 'overlap', label: 'Overlap', type: 'number', min: 0, max: 500, default: 50 },
+    ],
+  },
+  {
+    id: 'data-mapper',
+    name: 'Data Mapper',
+    category: 'transform',
+    icon: ArrowRightLeft,
+    premium: false,
+    description: 'Map and transform data fields between schemas.',
+    inputs: [
+      { id: 'source', name: 'Source Data', type: 'object', required: true },
+    ],
+    outputs: [
+      { id: 'mapped', name: 'Mapped Data', type: 'object' },
+    ],
+    configFields: [
+      { key: 'mapping', label: 'Field Mapping', type: 'textarea', default: '{}' },
+      { key: 'dropUnmapped', label: 'Drop Unmapped', type: 'toggle', default: false },
+    ],
+  },
+  {
+    id: 'filter',
+    name: 'Filter',
+    category: 'transform',
+    icon: Filter,
+    premium: false,
+    description: 'Filter arrays or objects based on conditions.',
+    inputs: [
+      { id: 'data', name: 'Data', type: 'array', required: true },
+    ],
+    outputs: [
+      { id: 'filtered', name: 'Filtered', type: 'array' },
+      { id: 'rejected', name: 'Rejected', type: 'array' },
+    ],
+    configFields: [
+      { key: 'condition', label: 'Condition', type: 'textarea', default: 'item => true' },
+      { key: 'limit', label: 'Max Results', type: 'number', min: 0, max: 10000, default: 0 },
+    ],
+  },
+  {
+    id: 'aggregator',
+    name: 'Aggregator',
+    category: 'transform',
+    icon: Layers,
+    premium: false,
+    description: 'Aggregate multiple inputs into a single collection.',
+    inputs: [
+      { id: 'items', name: 'Items', type: 'array', required: true },
+    ],
+    outputs: [
+      { id: 'aggregated', name: 'Aggregated', type: 'object' },
+      { id: 'summary', name: 'Summary', type: 'string' },
+    ],
+    configFields: [
+      { key: 'operation', label: 'Operation', type: 'select', options: ['concat', 'merge', 'sum', 'count', 'average'], default: 'concat' },
+      { key: 'groupBy', label: 'Group By', type: 'text', default: '' },
+    ],
+  },
+
+  // ─── Output Tools ───
+  {
+    id: 'email-sender',
+    name: 'Email Sender',
+    category: 'output',
+    icon: Mail,
+    premium: true,
+    description: 'Send emails with dynamic content and attachments.',
+    requiredApiKeys: ['sendgrid'],
+    inputs: [
+      { id: 'content', name: 'Content', type: 'string', required: true },
+      { id: 'attachments', name: 'Attachments', type: 'array', required: false },
+    ],
+    outputs: [
+      { id: 'messageId', name: 'Message ID', type: 'string' },
+      { id: 'status', name: 'Send Status', type: 'string' },
+    ],
+    configFields: [
+      { key: 'to', label: 'To', type: 'text', default: '' },
+      { key: 'subject', label: 'Subject', type: 'text', default: '' },
+      { key: 'format', label: 'Format', type: 'select', options: ['html', 'text', 'markdown'], default: 'html' },
+    ],
+  },
+  {
+    id: 'webhook',
+    name: 'Webhook',
+    category: 'output',
+    icon: Webhook,
+    premium: false,
+    description: 'Send data to an external webhook endpoint.',
+    inputs: [
+      { id: 'payload', name: 'Payload', type: 'object', required: true },
+    ],
+    outputs: [
+      { id: 'response', name: 'Response', type: 'object' },
+      { id: 'status', name: 'Status', type: 'number' },
+    ],
+    configFields: [
+      { key: 'url', label: 'Webhook URL', type: 'text', default: '' },
+      { key: 'method', label: 'Method', type: 'select', options: ['POST', 'PUT'], default: 'POST' },
+      { key: 'retries', label: 'Retries', type: 'number', min: 0, max: 5, default: 3 },
+    ],
+  },
+  {
+    id: 'file-writer',
+    name: 'File Writer',
+    category: 'output',
+    icon: FileOutput,
+    premium: false,
+    description: 'Write data to files in various formats.',
+    inputs: [
+      { id: 'data', name: 'Data', type: 'any', required: true },
+    ],
+    outputs: [
+      { id: 'path', name: 'File Path', type: 'string' },
+      { id: 'size', name: 'File Size', type: 'number' },
+    ],
+    configFields: [
+      { key: 'filename', label: 'Filename', type: 'text', default: 'output.json' },
+      { key: 'format', label: 'Format', type: 'select', options: ['json', 'csv', 'txt', 'markdown'], default: 'json' },
+      { key: 'overwrite', label: 'Overwrite', type: 'toggle', default: false },
+    ],
+  },
+
+  // ─── Control Flow ───
+  {
+    id: 'conditional-branch',
+    name: 'Conditional Branch',
+    category: 'control',
+    icon: GitBranch,
+    premium: false,
+    description: 'Route data flow based on conditions — true or false branch.',
+    inputs: [
+      { id: 'value', name: 'Value', type: 'any', required: true },
+    ],
+    outputs: [
+      { id: 'true', name: 'True Branch', type: 'any' },
+      { id: 'false', name: 'False Branch', type: 'any' },
+    ],
+    configFields: [
+      { key: 'condition', label: 'Condition', type: 'textarea', default: 'value !== null' },
+      { key: 'operator', label: 'Operator', type: 'select', options: ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'custom'], default: 'custom' },
+    ],
+  },
+  {
+    id: 'loop',
+    name: 'Loop',
+    category: 'control',
+    icon: Repeat,
+    premium: false,
+    description: 'Iterate over arrays or repeat execution a fixed number of times.',
+    inputs: [
+      { id: 'items', name: 'Items', type: 'array', required: true },
+    ],
+    outputs: [
+      { id: 'item', name: 'Current Item', type: 'any' },
+      { id: 'index', name: 'Index', type: 'number' },
+      { id: 'done', name: 'Done', type: 'boolean' },
+    ],
+    configFields: [
+      { key: 'mode', label: 'Mode', type: 'select', options: ['forEach', 'while', 'count'], default: 'forEach' },
+      { key: 'maxIterations', label: 'Max Iterations', type: 'number', min: 1, max: 10000, default: 100 },
+    ],
+  },
+  {
+    id: 'human-approval',
+    name: 'Human Approval',
+    category: 'control',
+    icon: UserCheck,
+    premium: false,
+    description: 'Pause execution and wait for human review and approval.',
+    inputs: [
+      { id: 'data', name: 'Data for Review', type: 'any', required: true },
+      { id: 'message', name: 'Review Message', type: 'string', required: false },
+    ],
+    outputs: [
+      { id: 'approved', name: 'Approved', type: 'boolean' },
+      { id: 'feedback', name: 'Feedback', type: 'string' },
+    ],
+    configFields: [
+      { key: 'prompt', label: 'Approval Prompt', type: 'textarea', default: 'Please review and approve this step.' },
+      { key: 'timeout', label: 'Timeout (min)', type: 'number', min: 1, max: 1440, default: 60 },
+      { key: 'autoApprove', label: 'Auto Approve', type: 'toggle', default: false },
+    ],
+  },
+  {
+    id: 'merge',
+    name: 'Merge',
+    category: 'control',
+    icon: Merge,
+    premium: false,
+    description: 'Merge multiple input branches into a single output.',
+    inputs: [
+      { id: 'input1', name: 'Input 1', type: 'any', required: true },
+      { id: 'input2', name: 'Input 2', type: 'any', required: false },
+    ],
+    outputs: [
+      { id: 'merged', name: 'Merged Output', type: 'object' },
+    ],
+    configFields: [
+      { key: 'strategy', label: 'Merge Strategy', type: 'select', options: ['waitAll', 'waitAny', 'append'], default: 'waitAll' },
+    ],
+  },
+];
+
+// ─── API Key Provider Definitions ───
+export const apiKeyProviders = [
+  { id: 'openai', name: 'OpenAI', description: 'GPT-4o, GPT-4o-mini models', placeholder: 'sk-...' },
+  { id: 'anthropic', name: 'Anthropic', description: 'Claude 3.5 Sonnet and models', placeholder: 'sk-ant-...' },
+  { id: 'google', name: 'Google AI', description: 'Gemini Pro and models', placeholder: 'AIza...' },
+  { id: 'serpapi', name: 'SerpAPI', description: 'Web search results', placeholder: '' },
+  { id: 'sendgrid', name: 'SendGrid', description: 'Email delivery service', placeholder: 'SG...' },
+  { id: 'database', name: 'Database', description: 'Database connection string', placeholder: 'postgresql://...' },
+];
+
+export const toolCategories = [
+  { id: 'agent', name: 'Agent Tools', color: '#8b5cf6', description: 'AI-powered tools for intelligent processing' },
+  { id: 'data', name: 'Data Tools', color: '#06b6d4', description: 'Fetch, query, and parse data sources' },
+  { id: 'transform', name: 'Transform', color: '#f59e0b', description: 'Shape and transform data between steps' },
+  { id: 'output', name: 'Output', color: '#10b981', description: 'Send results to external destinations' },
+  { id: 'control', name: 'Control Flow', color: '#ec4899', description: 'Branching, loops, and flow control' },
+];
+
+export const getCategoryColor = (category) => {
+  const cat = toolCategories.find(c => c.id === category);
+  return cat ? cat.color : '#6b7280';
+};
+
+export const getToolById = (toolId) => {
+  return mcpTools.find(t => t.id === toolId);
+};
+
+export const getPremiumTools = () => {
+  return mcpTools.filter(t => t.premium);
+};
+
+export default mcpTools;

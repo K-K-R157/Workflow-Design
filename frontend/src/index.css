@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* ─── Design Tokens ─── */
+@theme {
+  --color-surface-0: #0a0a12;
+  --color-surface-1: #0f0f1a;
+  --color-surface-2: #161625;
+  --color-surface-3: #1e1e32;
+  --color-surface-4: #28283f;
+
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-default: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+
+  --color-text-primary: #f0eef5;
+  --color-text-secondary: #9896a3;
+  --color-text-muted: #5f5d6b;
+
+  --color-accent-purple: #8b5cf6;
+  --color-accent-purple-glow: rgba(139, 92, 246, 0.35);
+  --color-accent-cyan: #06b6d4;
+  --color-accent-cyan-glow: rgba(6, 182, 212, 0.3);
+  --color-accent-pink: #ec4899;
+
+  --color-status-idle: #6b7280;
+  --color-status-running: #3b82f6;
+  --color-status-success: #10b981;
+  --color-status-error: #ef4444;
+  --color-status-paused: #f59e0b;
+  --color-status-waiting: #8b5cf6;
+
+  --color-category-agent: #8b5cf6;
+  --color-category-data: #06b6d4;
+  --color-category-transform: #f59e0b;
+  --color-category-output: #10b981;
+  --color-category-control: #ec4899;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --animate-pulse-glow: pulse-glow 2s ease-in-out infinite;
+  --animate-flow-dash: flow-dash 1.5s linear infinite;
+  --animate-slide-in-right: slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-up: slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade-in: fade-in 0.25s ease-out;
+  --animate-spin-slow: spin 3s linear infinite;
+}
+
+/* ─── Keyframes ─── */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes flow-dash {
+  to { stroke-dashoffset: -20; }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes node-appear {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ─── Base Reset ─── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-surface-0);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--color-accent-purple);
+  color: white;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ─── Glass Utility ─── */
+.glass {
+  background: rgba(15, 15, 26, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--color-border-default);
+}
+
+.glass-light {
+  background: rgba(30, 30, 50, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border-subtle);
+}
+
+/* ─── React Flow Overrides ─── */
+.react-flow__background {
+  background: var(--color-surface-0) !important;
+}
+
+.react-flow__minimap {
+  background: var(--color-surface-2) !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--color-border-default) !important;
+  overflow: hidden !important;
+}
+
+.react-flow__controls {
+  border-radius: 12px !important;
+  border: 1px solid var(--color-border-default) !important;
+  background: var(--color-surface-2) !important;
+  overflow: hidden !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+}
+
+.react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 1px solid var(--color-border-subtle) !important;
+  color: var(--color-text-secondary) !important;
+  fill: var(--color-text-secondary) !important;
+  width: 36px !important;
+  height: 36px !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--color-surface-3) !important;
+  color: var(--color-text-primary) !important;
+  fill: var(--color-text-primary) !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__handle {
+  width: 12px !important;
+  height: 12px !important;
+  border: 2px solid var(--color-surface-3) !important;
+  background: var(--color-accent-purple) !important;
+  transition: all 0.2s ease;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.3);
+  box-shadow: 0 0 10px var(--color-accent-purple-glow);
+}
+
+.react-flow__handle-left {
+  left: -6px !important;
+}
+
+.react-flow__handle-right {
+  right: -6px !important;
+}
+
+/* ─── Node Appear Animation ─── */
+.react-flow__node {
+  animation: node-appear 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
