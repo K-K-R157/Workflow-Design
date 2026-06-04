@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Pause, SkipForward, RotateCcw, Save, Download,
-  Zap, CheckCircle2, AlertTriangle, Loader2, Trash2, Settings, Home
+  Zap, CheckCircle2, AlertTriangle, Loader2, Trash2, Settings, Home,
+  X, XCircle, Info
 } from 'lucide-react';
 import {
   selectExecutionStatus,
@@ -43,6 +44,9 @@ export default function ExecutionBar({ workflowDbId, setWorkflowDbId }) {
   const validationErrors = useSelector(selectValidationErrors);
   const validationWarnings = useSelector(selectValidationWarnings);
   const [saving, setSaving] = useState(false);
+  const [showValidation, setShowValidation] = useState(false);
+  const [validationSuccess, setValidationSuccess] = useState(false);
+  const validationRef = useRef(null);
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(workflowName);
@@ -116,8 +120,29 @@ export default function ExecutionBar({ workflowDbId, setWorkflowDbId }) {
   }, [workflowName, nodes, edges]);
 
   const handleValidate = useCallback(() => {
-    runValidation();
+    const result = runValidation();
+    if (result.errors.length > 0 || result.warnings.length > 0) {
+      setShowValidation(true);
+      setValidationSuccess(false);
+    } else {
+      setShowValidation(false);
+      setValidationSuccess(true);
+      setTimeout(() => setValidationSuccess(false), 3000);
+    }
   }, [runValidation]);
+
+  // Close validation panel when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (validationRef.current && !validationRef.current.contains(e.target)) {
+        setShowValidation(false);
+      }
+    };
+    if (showValidation) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showValidation]);
 
   const status = statusConfig[executionStatus] || statusConfig.idle;
   const StatusIcon = status.icon;
@@ -128,12 +153,14 @@ export default function ExecutionBar({ workflowDbId, setWorkflowDbId }) {
 
   return (
     <div
-      className="shrink-0 flex items-center gap-3 px-4"
+      className="shrink-0 flex items-center gap-3 px-4 relative"
       style={{
         height: 56,
         background: 'rgba(15, 15, 26, 0.85)',
         backdropFilter: 'blur(20px)',
         borderBottom: '1px solid var(--color-border-default)',
+        overflow: 'visible',
+        zIndex: 50,
       }}
     >
       {/* ─── Logo / Home ─── */}
@@ -279,23 +306,43 @@ export default function ExecutionBar({ workflowDbId, setWorkflowDbId }) {
       {/* ─── Spacer ─── */}
       <div className="flex-1" />
 
-      {/* ─── Validation ─── */}
+      {/* ─── Validation Badges ─── */}
       {(validationErrors.length > 0 || validationWarnings.length > 0) && (
-        <div className="flex items-center gap-2 mr-2">
+        <div
+          className="flex items-center gap-2 mr-2 cursor-pointer"
+          onClick={() => setShowValidation(!showValidation)}
+          title="Click to see details"
+        >
           {validationErrors.length > 0 && (
-            <span className="flex items-center gap-1 text-[11px] font-medium" style={{ color: '#ef4444' }}>
-              <AlertTriangle size={12} />
+            <span className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md" style={{ color: '#ef4444', background: 'rgba(239,68,68,0.1)' }}>
+              <XCircle size={12} />
               {validationErrors.length} error{validationErrors.length !== 1 ? 's' : ''}
             </span>
           )}
           {validationWarnings.length > 0 && (
-            <span className="flex items-center gap-1 text-[11px] font-medium" style={{ color: '#f59e0b' }}>
+            <span className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md" style={{ color: '#f59e0b', background: 'rgba(245,158,11,0.1)' }}>
               <AlertTriangle size={12} />
               {validationWarnings.length} warning{validationWarnings.length !== 1 ? 's' : ''}
             </span>
           )}
         </div>
       )}
+
+      {/* ─── Validation Success Toast ─── */}
+      <AnimatePresence>
+        {validationSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg mr-2"
+            style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)' }}
+          >
+            <CheckCircle2 size={13} style={{ color: '#10b981' }} />
+            <span className="text-[11px] font-semibold" style={{ color: '#10b981' }}>Valid — No issues found</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── Right Actions ─── */}
       <div className="flex items-center gap-1">
@@ -355,6 +402,70 @@ export default function ExecutionBar({ workflowDbId, setWorkflowDbId }) {
           <Trash2 size={15} />
         </button>
       </div>
+
+      {/* ─── Validation Results Dropdown Panel ─── */}
+      <AnimatePresence>
+        {showValidation && (validationErrors.length > 0 || validationWarnings.length > 0) && (
+          <motion.div
+            ref={validationRef}
+            initial={{ opacity: 0, y: -8, scaleY: 0.95 }}
+            animate={{ opacity: 1, y: 0, scaleY: 1 }}
+            exit={{ opacity: 0, y: -8, scaleY: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute right-4 top-14 z-50 w-[380px] max-h-[320px] overflow-y-auto rounded-xl"
+            style={{
+              background: 'rgba(15, 15, 26, 0.95)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+            }}
+          >
+            {/* Panel Header */}
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={14} style={{ color: validationErrors.length > 0 ? '#ef4444' : '#f59e0b' }} />
+                <span className="text-[12px] font-semibold text-white">Validation Results</span>
+              </div>
+              <button
+                onClick={() => setShowValidation(false)}
+                className="w-5 h-5 rounded flex items-center justify-center cursor-pointer hover:bg-white/5 transition-colors"
+              >
+                <X size={12} style={{ color: 'var(--color-text-muted)' }} />
+              </button>
+            </div>
+
+            {/* Errors */}
+            {validationErrors.length > 0 && (
+              <div className="px-4 py-3" style={{ borderBottom: validationWarnings.length > 0 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                <span className="text-[10px] font-semibold uppercase tracking-wider block mb-2" style={{ color: '#ef4444' }}>Errors</span>
+                <div className="space-y-1.5">
+                  {validationErrors.map((err, i) => (
+                    <div key={`err-${i}`} className="flex items-start gap-2 p-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.06)' }}>
+                      <XCircle size={13} className="shrink-0 mt-0.5" style={{ color: '#ef4444' }} />
+                      <span className="text-[11px] leading-relaxed" style={{ color: '#fca5a5' }}>{err}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Warnings */}
+            {validationWarnings.length > 0 && (
+              <div className="px-4 py-3">
+                <span className="text-[10px] font-semibold uppercase tracking-wider block mb-2" style={{ color: '#f59e0b' }}>Warnings</span>
+                <div className="space-y-1.5">
+                  {validationWarnings.map((warn, i) => (
+                    <div key={`warn-${i}`} className="flex items-start gap-2 p-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.06)' }}>
+                      <AlertTriangle size={13} className="shrink-0 mt-0.5" style={{ color: '#f59e0b' }} />
+                      <span className="text-[11px] leading-relaxed" style={{ color: '#fde68a' }}>{warn}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
