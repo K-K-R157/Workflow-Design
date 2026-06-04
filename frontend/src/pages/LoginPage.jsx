@@ -1,16 +1,41 @@
 import { useState } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Zap, Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
+import { Zap, Mail, Lock, ArrowRight, Eye, EyeOff, User, Loader2 } from 'lucide-react';
+import { login, register, selectAuthLoading, selectAuthError, clearError } from '../stores/authSlice';
 
-export default function LoginPage({ onNavigate }) {
+export default function LoginPage() {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const isLoading = useSelector(selectAuthLoading);
+  const authError = useSelector(selectAuthError);
+
+  const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Stub — will integrate with auth when backend arrives
-    onNavigate?.('home');
+    dispatch(clearError());
+
+    let result;
+    if (isRegister) {
+      result = await dispatch(register({ email, password, name }));
+    } else {
+      result = await dispatch(login({ email, password }));
+    }
+
+    if (!result.error) {
+      navigate('/home');
+    }
+  };
+
+  const toggleMode = () => {
+    setIsRegister(!isRegister);
+    dispatch(clearError());
   };
 
   return (
@@ -36,11 +61,31 @@ export default function LoginPage({ onNavigate }) {
             }}>
             <Zap size={24} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1">Welcome back</h1>
+          <h1 className="text-2xl font-bold text-white mb-1">
+            {isRegister ? 'Create account' : 'Welcome back'}
+          </h1>
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            Sign in to your Workflow Designer account
+            {isRegister
+              ? 'Sign up to start building workflows'
+              : 'Sign in to your Workflow Designer account'}
           </p>
         </div>
+
+        {/* Error Message */}
+        {authError && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 px-4 py-3 rounded-xl text-[12px] font-medium"
+            style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              border: '1px solid rgba(239, 68, 68, 0.15)',
+              color: '#ef4444',
+            }}
+          >
+            {authError}
+          </motion.div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -50,6 +95,36 @@ export default function LoginPage({ onNavigate }) {
               border: '1px solid var(--color-border-default)',
               backdropFilter: 'blur(20px)',
             }}>
+
+            {/* Name (register only) */}
+            {isRegister && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="space-y-1.5"
+              >
+                <label className="text-[11px] font-semibold uppercase tracking-wider block"
+                  style={{ color: 'var(--color-text-muted)' }}>
+                  Name
+                </label>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                  }}>
+                  <User size={15} style={{ color: 'var(--color-text-muted)' }} />
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your name"
+                    className="flex-1 bg-transparent border-none outline-none text-[13px] text-white placeholder:text-gray-600"
+                  />
+                </div>
+              </motion.div>
+            )}
+
             {/* Email */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-semibold uppercase tracking-wider block"
@@ -67,6 +142,7 @@ export default function LoginPage({ onNavigate }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
+                  required
                   className="flex-1 bg-transparent border-none outline-none text-[13px] text-white placeholder:text-gray-600"
                 />
               </div>
@@ -89,6 +165,8 @@ export default function LoginPage({ onNavigate }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  required
+                  minLength={6}
                   className="flex-1 bg-transparent border-none outline-none text-[13px] text-white placeholder:text-gray-600"
                 />
                 <button
@@ -107,24 +185,34 @@ export default function LoginPage({ onNavigate }) {
             {/* Submit */}
             <motion.button
               type="submit"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold cursor-pointer"
+              disabled={isLoading}
+              whileHover={{ scale: isLoading ? 1 : 1.02 }}
+              whileTap={{ scale: isLoading ? 1 : 0.98 }}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-semibold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               style={{
                 background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
                 color: 'white',
               }}
             >
-              Sign In
-              <ArrowRight size={15} />
+              {isLoading ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  {isRegister ? 'Creating account...' : 'Signing in...'}
+                </>
+              ) : (
+                <>
+                  {isRegister ? 'Create Account' : 'Sign In'}
+                  <ArrowRight size={15} />
+                </>
+              )}
             </motion.button>
           </div>
         </form>
 
         <p className="text-center mt-6 text-[12px]" style={{ color: 'var(--color-text-muted)' }}>
-          Don't have an account?{' '}
-          <button className="cursor-pointer font-medium" style={{ color: '#8b5cf6' }}>
-            Sign up
+          {isRegister ? 'Already have an account? ' : "Don't have an account? "}
+          <button onClick={toggleMode} className="cursor-pointer font-medium" style={{ color: '#8b5cf6' }}>
+            {isRegister ? 'Sign in' : 'Sign up'}
           </button>
         </p>
       </motion.div>

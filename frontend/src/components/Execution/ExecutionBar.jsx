@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Play, Pause, SkipForward, RotateCcw, Save, Download,
-  Zap, CheckCircle2, AlertTriangle, Loader2, Trash2, Settings
+  Zap, CheckCircle2, AlertTriangle, Loader2, Trash2, Settings, Home
 } from 'lucide-react';
 import {
   selectExecutionStatus,
@@ -11,11 +12,13 @@ import {
   selectExecutionOrder,
 } from '../../stores/executionSlice';
 import {
-  selectWorkflowName, selectIsDirty, selectNodes,
+  selectWorkflowName, selectIsDirty, selectNodes, selectEdges,
   selectValidationErrors, selectValidationWarnings,
+  setWorkflowName, markClean, setWorkflowId,
 } from '../../stores/workflowSlice';
 import { openSettings } from '../../stores/apiKeysSlice';
 import { useWorkflow } from '../../hooks/useWorkflow';
+import { apiCreateWorkflow, apiUpdateWorkflow } from '../../services/api';
 
 const statusConfig = {
   idle:     { label: 'Ready', color: '#6b7280', icon: Zap, bg: 'rgba(107,114,128,0.1)' },
@@ -25,8 +28,9 @@ const statusConfig = {
   error:    { label: 'Error', color: '#ef4444', icon: AlertTriangle, bg: 'rgba(239,68,68,0.1)' },
 };
 
-export default function ExecutionBar() {
+export default function ExecutionBar({ workflowDbId, setWorkflowDbId }) {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { handleRun, handlePause, handleStep, handleReset, handleClear, runValidation } = useWorkflow();
 
   const executionStatus = useSelector(selectExecutionStatus);
@@ -35,8 +39,10 @@ export default function ExecutionBar() {
   const workflowName = useSelector(selectWorkflowName);
   const isDirty = useSelector(selectIsDirty);
   const nodes = useSelector(selectNodes);
+  const edges = useSelector(selectEdges);
   const validationErrors = useSelector(selectValidationErrors);
   const validationWarnings = useSelector(selectValidationWarnings);
+  const [saving, setSaving] = useState(false);
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(workflowName);
@@ -68,7 +74,46 @@ export default function ExecutionBar() {
 
   const handleNameSubmit = () => {
     setIsEditingName(false);
+    if (nameValue.trim() && nameValue !== workflowName) {
+      dispatch(setWorkflowName(nameValue.trim()));
+    }
   };
+
+  // ─── Save workflow to backend ───
+  const handleSave = useCallback(async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const workflowData = { name: workflowName, nodes, edges };
+      if (workflowDbId) {
+        await apiUpdateWorkflow(workflowDbId, workflowData);
+      } else {
+        const data = await apiCreateWorkflow(workflowData);
+        const newId = data.data._id;
+        setWorkflowDbId?.(newId);
+        dispatch(setWorkflowId(newId));
+        // Update URL without full navigation
+        window.history.replaceState(null, '', `/editor/${newId}`);
+      }
+      dispatch(markClean());
+    } catch (err) {
+      console.error('Save failed:', err);
+    } finally {
+      setSaving(false);
+    }
+  }, [workflowDbId, workflowName, nodes, edges, saving, dispatch, setWorkflowDbId]);
+
+  // ─── Export workflow as JSON ───
+  const handleExport = useCallback(() => {
+    const data = JSON.stringify({ name: workflowName, nodes, edges }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${workflowName.replace(/\s+/g, '_').toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [workflowName, nodes, edges]);
 
   const handleValidate = useCallback(() => {
     runValidation();
@@ -91,17 +136,19 @@ export default function ExecutionBar() {
         borderBottom: '1px solid var(--color-border-default)',
       }}
     >
-      {/* ─── Logo / Brand ─── */}
-      <div className="flex items-center gap-2.5 mr-2">
-        <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center"
+      {/* ─── Logo / Home ─── */}
+      <div className="flex items-center gap-2 mr-2">
+        <button
+          onClick={() => navigate('/home')}
+          className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-all hover:scale-105"
           style={{
             background: 'linear-gradient(135deg, #8b5cf6, #06b6d4)',
             boxShadow: '0 2px 8px rgba(139, 92, 246, 0.3)',
           }}
+          title="Go to dashboard"
         >
           <Zap size={16} className="text-white" />
-        </div>
+        </button>
       </div>
 
       {/* ─── Workflow Name ─── */}
@@ -277,17 +324,21 @@ export default function ExecutionBar() {
         </button>
 
         <button
-          className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors hover:bg-white/5"
-          style={{ color: 'var(--color-text-muted)' }}
-          title="Save workflow"
+          onClick={handleSave}
+          disabled={saving || (!isDirty && workflowDbId)}
+          className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
+          style={{ color: saving ? '#8b5cf6' : 'var(--color-text-muted)' }}
+          title={saving ? 'Saving...' : 'Save workflow'}
         >
-          <Save size={15} />
+          {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
         </button>
 
         <button
-          className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors hover:bg-white/5"
+          onClick={handleExport}
+          disabled={nodes.length === 0}
+          className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer transition-colors hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed"
           style={{ color: 'var(--color-text-muted)' }}
-          title="Export workflow"
+          title="Export workflow as JSON"
         >
           <Download size={15} />
         </button>

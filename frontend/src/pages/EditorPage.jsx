@@ -1,9 +1,11 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { ReactFlowProvider } from '@xyflow/react';
 import { DndContext, DragOverlay, MouseSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { useDispatch } from 'react-redux';
-import { addNode, setSelectedNode } from '../stores/workflowSlice';
+import { addNode, setSelectedNode, loadWorkflow, setWorkflowName } from '../stores/workflowSlice';
 import { getToolById } from '../data/mcpTools';
+import { apiGetWorkflow } from '../services/api';
 
 import ExecutionBar from '../components/Execution/ExecutionBar';
 import ToolPanel from '../components/Sidebar/ToolPanel';
@@ -15,8 +17,33 @@ import ApiKeySettings from '../components/Settings/ApiKeySettings';
 let dropNodeCounter = 0;
 
 export default function EditorPage() {
+  const { workflowId } = useParams();
   const dispatch = useDispatch();
   const canvasRef = useRef(null);
+  const [workflowDbId, setWorkflowDbId] = useState(workflowId || null);
+
+  // Load workflow from backend when navigating to /editor/:workflowId
+  useEffect(() => {
+    if (workflowId) {
+      loadWorkflowFromBackend(workflowId);
+    }
+  }, [workflowId]);
+
+  const loadWorkflowFromBackend = async (id) => {
+    try {
+      const data = await apiGetWorkflow(id);
+      const wf = data.data;
+      dispatch(loadWorkflow({
+        nodes: wf.nodes || [],
+        edges: wf.edges || [],
+        name: wf.name || 'Untitled Workflow',
+        id: wf._id,
+      }));
+      setWorkflowDbId(wf._id);
+    } catch (err) {
+      console.error('Failed to load workflow:', err);
+    }
+  };
 
   const mouseSensor = useSensor(MouseSensor, {
     activationConstraint: { distance: 8 },
@@ -26,7 +53,6 @@ export default function EditorPage() {
   const handleDragEnd = useCallback((event) => {
     const { active, over } = event;
 
-    // Always create node on drag end (either dropped on canvas or anywhere)
     const tool = active.data.current?.tool;
     if (!tool) return;
 
@@ -36,7 +62,6 @@ export default function EditorPage() {
     dropNodeCounter++;
     const nodeId = `node-${Date.now()}-${dropNodeCounter}`;
 
-    // Calculate drop position
     const canvasEl = canvasRef.current;
     let position = { x: 300 + Math.random() * 200, y: 200 + Math.random() * 200 };
 
@@ -47,7 +72,6 @@ export default function EditorPage() {
       position = { x: dropX - 100, y: dropY - 50 };
     }
 
-    // Only store serializable data in Redux — no component references
     const newNode = {
       id: nodeId,
       type: 'custom',
@@ -71,7 +95,7 @@ export default function EditorPage() {
       <ReactFlowProvider>
         <div className="h-screen w-screen flex flex-col" style={{ background: 'var(--color-surface-0)' }}>
           {/* ─── Top: Execution Bar ─── */}
-          <ExecutionBar />
+          <ExecutionBar workflowDbId={workflowDbId} setWorkflowDbId={setWorkflowDbId} />
 
           {/* ─── Middle: Sidebar + Canvas + Config ─── */}
           <div className="flex-1 flex overflow-hidden min-h-0">

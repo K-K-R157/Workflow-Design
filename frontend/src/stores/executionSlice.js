@@ -2,6 +2,7 @@ import { createSlice, createSelector } from '@reduxjs/toolkit';
 
 const initialState = {
   status: 'idle', // idle | running | paused | complete | error
+  runId: null,    // Backend Run document _id
   currentStepIndex: -1,
   executionOrder: [],
   nodeStatuses: {},     // { [nodeId]: 'idle' | 'running' | 'success' | 'error' | 'waiting' | 'skipped' }
@@ -17,8 +18,9 @@ const executionSlice = createSlice({
   initialState,
   reducers: {
     startExecution(state, action) {
-      const { executionOrder } = action.payload;
+      const { executionOrder, runId } = action.payload;
       state.status = 'running';
+      state.runId = runId || null;
       state.executionOrder = executionOrder;
       state.currentStepIndex = 0;
       state.startTime = Date.now();
@@ -159,19 +161,23 @@ const executionSlice = createSlice({
         ...action.payload,
       });
     },
+    setRunId(state, action) {
+      state.runId = action.payload;
+    },
   },
 });
 
 export const {
   startExecution, pauseExecution, resumeExecution, stepForward,
   setNodeStatus, setNodeOutput, setExecutionError,
-  resetExecution, addLogEntry,
+  resetExecution, addLogEntry, setRunId,
 } = executionSlice.actions;
 
 // ─── Selectors ───
 export const selectExecutionStatus = (state) => state.execution.status;
 export const selectCurrentStepIndex = (state) => state.execution.currentStepIndex;
 export const selectExecutionOrder = (state) => state.execution.executionOrder;
+export const selectRunId = (state) => state.execution.runId;
 export const selectNodeStatuses = (state) => state.execution.nodeStatuses;
 export const selectNodeOutputs = (state) => state.execution.nodeOutputs;
 export const selectExecutionLog = (state) => state.execution.executionLog;

@@ -1,49 +1,101 @@
-import { useEffect, useCallback, useRef, useState } from 'react';
-import socketClient from '../services/socketClient';
+import { useEffect, useCallback, useRef } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { selectUser } from '../stores/authSlice';
+import { connectSocket, disconnectSocket, getSocket, subscribeToExecution } from '../services/socketClient';
+import {
+  setNodeStatus, setNodeOutput, setExecutionError,
+  startExecution, pauseExecution, resetExecution,
+  stepForward, addLogEntry,
+} from '../stores/executionSlice';
 
 /**
- * Stubbed Socket.IO hook — provides standard interface for real-time communication.
- * Will be connected to a real server when backend architecture is implemented.
+ * useSocket — Connects to Socket.IO server and handles execution events.
+ * Automatically connects when user is authenticated and subscribes
+ * to all run/node lifecycle events, dispatching to Redux.
  */
-export function useSocket(autoConnect = false) {
-  const [isConnected, setIsConnected] = useState(false);
-  const socketRef = useRef(socketClient);
+export function useSocket() {
+  const dispatch = useDispatch();
+  const user = useSelector(selectUser);
+  const unsubRef = useRef(null);
 
   useEffect(() => {
-    const socket = socketRef.current;
+    if (!user?.id) return;
 
-    socket.on('connect', () => setIsConnected(true));
-    socket.on('disconnect', () => setIsConnected(false));
+    const socket = connectSocket(user.id);
 
-    if (autoConnect) {
-      socket.connect();
-    }
+    // Subscribe to execution events and dispatch to Redux
+    unsubRef.current = subscribeToExecution({
+      'run:started': (data) => {
+        dispatch(startExecution({
+          executionOrder: data.executionOrder,
+          runId: data.runId,
+        }));
+        dispatch(addLogEntry({
+          nodeId: null,
+          message: `Run started: ${data.runId}`,
+          level: 'info',
+        }));
+      },
+      'node:start': (data) => {
+        dispatch(setNodeStatus({ nodeId: data.nodeId, status: 'running' }));
+        dispatch(addLogEntry({
+          nodeId: data.nodeId,
+          message: 'Node execution started.',
+          level: 'info',
+        }));
+      },
+      'node:done': (data) => {
+        dispatch(setNodeStatus({ nodeId: data.nodeId, status: 'success' }));
+        dispatch(setNodeOutput({
+          nodeId: data.nodeId,
+          outputs: data.outputs,
+          duration: data.duration,
+        }));
+        dispatch(stepForward());
+      },
+      'node:error': (data) => {
+        dispatch(setNodeStatus({ nodeId: data.nodeId, status: 'error' }));
+        dispatch(addLogEntry({
+          nodeId: data.nodeId,
+          message: `Error: ${data.error}`,
+          level: 'error',
+        }));
+      },
+      'run:paused': (data) => {
+        dispatch(pauseExecution());
+      },
+      'run:complete': (data) => {
+        dispatch(addLogEntry({
+          nodeId: null,
+          message: `Run completed in ${(data.duration / 1000).toFixed(1)}s`,
+          level: 'success',
+        }));
+      },
+      'run:error': (data) => {
+        dispatch(setExecutionError({
+          nodeId: null,
+          error: data.error,
+        }));
+      },
+      'run:reset': () => {
+        dispatch(resetExecution());
+      },
+    });
 
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
+      if (unsubRef.current) {
+        unsubRef.current();
+      }
+      disconnectSocket();
     };
-  }, [autoConnect]);
+  }, [user?.id, dispatch]);
 
   const emit = useCallback((event, data) => {
-    socketRef.current.emit(event, data);
+    const socket = getSocket();
+    if (socket?.connected) {
+      socket.emit(event, data);
+    }
   }, []);
 
-  const on = useCallback((event, callback) => {
-    socketRef.current.on(event, callback);
-  }, []);
-
-  const off = useCallback((event, callback) => {
-    socketRef.current.off(event, callback);
-  }, []);
-
-  const connect = useCallback(() => {
-    socketRef.current.connect();
-  }, []);
-
-  const disconnect = useCallback(() => {
-    socketRef.current.disconnect();
-  }, []);
-
-  return { isConnected, emit, on, off, connect, disconnect };
+  return { emit };
 }

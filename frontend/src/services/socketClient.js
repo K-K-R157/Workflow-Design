@@ -1,53 +1,90 @@
+import { io } from 'socket.io-client';
+import { getToken } from './api';
+
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+
+let socket = null;
+
 /**
- * Stubbed Socket.IO client — will be wired to real server when backend arrives.
+ * Initialize or return the Socket.IO client instance.
  */
+export function getSocket() {
+  if (!socket) {
+    socket = io(SOCKET_URL, {
+      autoConnect: false,
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+    });
+  }
+  return socket;
+}
 
-class SocketClient {
-  constructor() {
-    this.connected = false;
-    this.listeners = new Map();
+/**
+ * Connect to Socket.IO server and join user room.
+ * @param {string} userId — User ID to join room
+ */
+export function connectSocket(userId) {
+  const s = getSocket();
+
+  if (!s.connected) {
+    s.connect();
+
+    s.on('connect', () => {
+      console.log('🔌 Socket connected:', s.id);
+      if (userId) {
+        s.emit('auth:join', userId);
+      }
+    });
+
+    s.on('disconnect', (reason) => {
+      console.log('🔌 Socket disconnected:', reason);
+    });
+
+    s.on('connect_error', (err) => {
+      console.warn('⚠️  Socket connection error:', err.message);
+    });
+  } else if (userId) {
+    s.emit('auth:join', userId);
   }
 
-  connect(url = 'ws://localhost:3001') {
-    console.log(`[Socket Stub] Would connect to ${url}`);
-    this.connected = true;
-    // Simulate connection event
-    this._emit('connect', { socketId: 'stub-socket-id' });
-  }
+  return s;
+}
 
-  disconnect() {
-    console.log('[Socket Stub] Disconnected');
-    this.connected = false;
-    this._emit('disconnect', {});
-  }
-
-  emit(event, data) {
-    console.log(`[Socket Stub] Emit: ${event}`, data);
-  }
-
-  on(event, callback) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, []);
-    }
-    this.listeners.get(event).push(callback);
-  }
-
-  off(event, callback) {
-    if (!this.listeners.has(event)) return;
-    if (callback) {
-      const callbacks = this.listeners.get(event).filter(cb => cb !== callback);
-      this.listeners.set(event, callbacks);
-    } else {
-      this.listeners.delete(event);
-    }
-  }
-
-  _emit(event, data) {
-    const callbacks = this.listeners.get(event) || [];
-    callbacks.forEach(cb => cb(data));
+/**
+ * Disconnect the socket.
+ */
+export function disconnectSocket() {
+  if (socket) {
+    socket.disconnect();
+    socket = null;
   }
 }
 
-// Singleton
-const socketClient = new SocketClient();
-export default socketClient;
+/**
+ * Subscribe to execution events.
+ * Returns an unsubscribe function.
+ */
+export function subscribeToExecution(handlers = {}) {
+  const s = getSocket();
+  const events = [
+    'run:started', 'run:paused', 'run:complete', 'run:error', 'run:reset',
+    'node:start', 'node:done', 'node:error',
+  ];
+
+  events.forEach((event) => {
+    if (handlers[event]) {
+      s.on(event, handlers[event]);
+    }
+  });
+
+  // Return unsubscribe function
+  return () => {
+    events.forEach((event) => {
+      if (handlers[event]) {
+        s.off(event, handlers[event]);
+      }
+    });
+  };
+}
+
+export default getSocket;

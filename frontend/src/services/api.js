@@ -1,67 +1,167 @@
 /**
- * Stubbed API service — will be wired to real backend endpoints later.
+ * API Service — Real HTTP client for backend communication.
+ * Uses fetch with JWT Bearer token from localStorage.
  */
 
-const MOCK_DELAY = 300;
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-const mockWorkflows = [
-  {
-    id: 'wf-1',
-    name: 'Research & Summarize',
-    description: 'Search the web, parse results, and generate a summary using LLM.',
-    createdAt: '2026-05-28T10:00:00Z',
-    updatedAt: '2026-06-01T14:30:00Z',
-    nodeCount: 4,
-    status: 'draft',
-  },
-  {
-    id: 'wf-2',
-    name: 'Data Pipeline',
-    description: 'Fetch data from API, transform, filter, and write to database.',
-    createdAt: '2026-05-25T08:00:00Z',
-    updatedAt: '2026-05-30T16:45:00Z',
-    nodeCount: 6,
-    status: 'published',
-  },
-  {
-    id: 'wf-3',
-    name: 'Email Digest',
-    description: 'Aggregate daily data, format as newsletter, and send via email.',
-    createdAt: '2026-06-01T12:00:00Z',
-    updatedAt: '2026-06-02T09:15:00Z',
-    nodeCount: 5,
-    status: 'draft',
-  },
-];
-
-export async function getWorkflows() {
-  await delay(MOCK_DELAY);
-  return { data: mockWorkflows };
+// ─── Token helpers ───
+export function getToken() {
+  return localStorage.getItem('token');
 }
 
-export async function saveWorkflow(workflowData) {
-  await delay(MOCK_DELAY);
-  console.log('[API Stub] Saving workflow:', workflowData);
-  return { data: { ...workflowData, updatedAt: new Date().toISOString() } };
+export function setToken(token) {
+  localStorage.setItem('token', token);
 }
 
-export async function loadWorkflow(workflowId) {
-  await delay(MOCK_DELAY);
-  console.log('[API Stub] Loading workflow:', workflowId);
-  return { data: { id: workflowId, nodes: [], edges: [], name: 'Loaded Workflow' } };
+export function removeToken() {
+  localStorage.removeItem('token');
 }
 
-export async function getTools() {
-  await delay(MOCK_DELAY);
-  // In production, this would fetch from the MCP server
-  const { default: mcpTools } = await import('../data/mcpTools.js');
-  return { data: mcpTools };
+// ─── Core fetch wrapper ───
+async function request(endpoint, options = {}) {
+  const token = getToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers,
+  };
+
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    const error = new Error(data.message || 'API request failed');
+    error.status = res.status;
+    error.data = data;
+    throw error;
+  }
+
+  return data;
 }
 
-export async function executeWorkflow(workflowId, options = {}) {
-  await delay(MOCK_DELAY);
-  console.log('[API Stub] Executing workflow:', workflowId, options);
-  return { data: { executionId: `exec-${Date.now()}`, status: 'started' } };
+// ───────────────────────────────────────────
+//  AUTH
+// ───────────────────────────────────────────
+
+export async function apiRegister(email, password, name) {
+  const data = await request('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password, name }),
+  });
+  if (data.data?.token) {
+    setToken(data.data.token);
+  }
+  return data;
+}
+
+export async function apiLogin(email, password) {
+  const data = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+  if (data.data?.token) {
+    setToken(data.data.token);
+  }
+  return data;
+}
+
+export async function apiGetMe() {
+  return request('/auth/me');
+}
+
+export function apiLogout() {
+  removeToken();
+}
+
+// ───────────────────────────────────────────
+//  WORKFLOWS
+// ───────────────────────────────────────────
+
+export async function apiGetWorkflows() {
+  return request('/workflows');
+}
+
+export async function apiGetWorkflow(id) {
+  return request(`/workflows/${id}`);
+}
+
+export async function apiCreateWorkflow(workflowData) {
+  return request('/workflows', {
+    method: 'POST',
+    body: JSON.stringify(workflowData),
+  });
+}
+
+export async function apiUpdateWorkflow(id, workflowData) {
+  return request(`/workflows/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(workflowData),
+  });
+}
+
+export async function apiDeleteWorkflow(id) {
+  return request(`/workflows/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// ───────────────────────────────────────────
+//  RUNS (Execution)
+// ───────────────────────────────────────────
+
+export async function apiStartRun(workflowId) {
+  return request(`/runs/${workflowId}/run`, {
+    method: 'POST',
+  });
+}
+
+export async function apiStepRun(runId) {
+  return request(`/runs/${runId}/step`, {
+    method: 'POST',
+  });
+}
+
+export async function apiPauseRun(runId) {
+  return request(`/runs/${runId}/pause`, {
+    method: 'POST',
+  });
+}
+
+export async function apiResetRun(runId) {
+  return request(`/runs/${runId}/reset`, {
+    method: 'POST',
+  });
+}
+
+export async function apiGetRun(runId) {
+  return request(`/runs/${runId}`);
+}
+
+export async function apiGetRunHistory(workflowId) {
+  return request(`/runs/workflow/${workflowId}`);
+}
+
+// ───────────────────────────────────────────
+//  TOOLS
+// ───────────────────────────────────────────
+
+export async function apiGetTools() {
+  return request('/tools');
+}
+
+export async function apiGetToolById(id) {
+  return request(`/tools/${id}`);
+}
+
+// ───────────────────────────────────────────
+//  HEALTH
+// ───────────────────────────────────────────
+
+export async function apiHealthCheck() {
+  return request('/health');
 }

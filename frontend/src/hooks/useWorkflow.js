@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   addNode, removeNode, addEdge as addEdgeAction, setSelectedNode,
@@ -8,9 +8,13 @@ import {
 import {
   startExecution, pauseExecution, resumeExecution,
   stepForward, resetExecution, selectExecutionStatus,
+  selectRunId, setRunId, addLogEntry,
 } from '../stores/executionSlice';
 import { getToolById } from '../data/mcpTools';
 import { validateConnection, validateWorkflow, getExecutionOrder } from '../services/validator';
+import {
+  apiStartRun, apiStepRun, apiPauseRun, apiResetRun,
+} from '../services/api';
 
 let nodeIdCounter = 0;
 
@@ -20,6 +24,11 @@ export function useWorkflow() {
   const edges = useSelector(selectEdges);
   const selectedNode = useSelector(selectSelectedNode);
   const executionStatus = useSelector(selectExecutionStatus);
+  const runId = useSelector(selectRunId);
+  const workflowId = useSelector((state) => state.workflow.workflowId);
+
+  // Track if an API call is in flight to avoid double-clicks
+  const apiInFlight = useRef(false);
 
   /**
    * Handle dropping a tool from the sidebar onto the canvas.
@@ -108,38 +117,127 @@ export function useWorkflow() {
   }, [nodes, edges, dispatch]);
 
   /**
-   * Start or step through execution.
+   * Start workflow execution via backend API.
+   * Falls back to local execution if no workflowId is saved.
    */
-  const handleRun = useCallback(() => {
+  const handleRun = useCallback(async () => {
+    if (apiInFlight.current) return;
+
     if (executionStatus === 'idle' || executionStatus === 'complete' || executionStatus === 'error') {
       const order = getExecutionOrder(nodes, edges);
-      if (order.length > 0) {
+      if (order.length === 0) return;
+
+      // If workflow is saved to backend, use backend execution
+      if (workflowId) {
+        apiInFlight.current = true;
+        try {
+          const data = await apiStartRun(workflowId);
+          dispatch(startExecution({
+            executionOrder: data.data.executionOrder,
+            runId: data.data.runId,
+          }));
+          dispatch(addLogEntry({
+            nodeId: null,
+            message: `Backend run started: ${data.data.runId}`,
+            level: 'info',
+          }));
+        } catch (err) {
+          console.error('Failed to start run:', err);
+          dispatch(addLogEntry({
+            nodeId: null,
+            message: `Failed to start: ${err.message}`,
+            level: 'error',
+          }));
+          // Fallback to local execution
+          dispatch(startExecution({ executionOrder: order }));
+        } finally {
+          apiInFlight.current = false;
+        }
+      } else {
+        // Local-only execution (workflow not saved)
         dispatch(startExecution({ executionOrder: order }));
       }
     } else if (executionStatus === 'paused') {
       dispatch(resumeExecution());
     }
-  }, [executionStatus, nodes, edges, dispatch]);
+  }, [executionStatus, nodes, edges, workflowId, dispatch]);
 
-  const handlePause = useCallback(() => {
+  /**
+   * Pause execution via backend API.
+   */
+  const handlePause = useCallback(async () => {
+    if (apiInFlight.current) return;
+
+    if (runId) {
+      apiInFlight.current = true;
+      try {
+        await apiPauseRun(runId);
+      } catch (err) {
+        console.error('Failed to pause run:', err);
+      } finally {
+        apiInFlight.current = false;
+      }
+    }
     dispatch(pauseExecution());
-  }, [dispatch]);
+  }, [runId, dispatch]);
 
-  const handleStep = useCallback(() => {
+  /**
+   * Step forward one node via backend API.
+   */
+  const handleStep = useCallback(async () => {
+    if (apiInFlight.current) return;
+
     if (executionStatus === 'idle' || executionStatus === 'complete' || executionStatus === 'error') {
-      // Start execution in paused mode then step once
       const order = getExecutionOrder(nodes, edges);
-      if (order.length > 0) {
+      if (order.length === 0) return;
+
+      if (workflowId) {
+        apiInFlight.current = true;
+        try {
+          const data = await apiStartRun(workflowId);
+          dispatch(startExecution({
+            executionOrder: data.data.executionOrder,
+            runId: data.data.runId,
+          }));
+        } catch (err) {
+          console.error('Failed to start run for step:', err);
+          dispatch(startExecution({ executionOrder: order }));
+        } finally {
+          apiInFlight.current = false;
+        }
+      } else {
         dispatch(startExecution({ executionOrder: order }));
+      }
+    } else if (runId) {
+      apiInFlight.current = true;
+      try {
+        await apiStepRun(runId);
+        // Socket events will update Redux via useSocket
+      } catch (err) {
+        console.error('Failed to step run:', err);
+        // Fallback: local step
+        dispatch(stepForward());
+      } finally {
+        apiInFlight.current = false;
       }
     } else {
       dispatch(stepForward());
     }
-  }, [executionStatus, nodes, edges, dispatch]);
+  }, [executionStatus, nodes, edges, workflowId, runId, dispatch]);
 
-  const handleReset = useCallback(() => {
+  /**
+   * Reset execution via backend API.
+   */
+  const handleReset = useCallback(async () => {
+    if (runId) {
+      try {
+        await apiResetRun(runId);
+      } catch (err) {
+        console.error('Failed to reset run:', err);
+      }
+    }
     dispatch(resetExecution());
-  }, [dispatch]);
+  }, [runId, dispatch]);
 
   const handleClear = useCallback(() => {
     dispatch(clearWorkflow());
