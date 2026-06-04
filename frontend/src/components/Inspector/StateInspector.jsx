@@ -32,13 +32,6 @@ export default function StateInspector() {
   const progress = useSelector(selectExecutionProgress);
   const nodes = useSelector(selectNodes);
 
-  // Auto-open when execution starts
-  const shouldShow = executionStatus !== 'idle';
-
-  if (!shouldShow && !isOpen) return null;
-
-  const errorLogs = executionLog.filter(l => l.level === 'error');
-
   const handleMouseDown = useCallback((e) => {
     e.preventDefault();
     const startY = e.clientY;
@@ -57,6 +50,14 @@ export default function StateInspector() {
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   }, [height]);
+
+  // Auto-open when execution starts
+  const shouldShow = executionStatus !== 'idle';
+
+  // Early return AFTER all hooks to satisfy React's rules of hooks
+  if (!shouldShow && !isOpen) return null;
+
+  const errorLogs = executionLog.filter(l => l.level === 'error');
 
   return (
     <AnimatePresence>
