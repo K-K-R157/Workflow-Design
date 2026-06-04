@@ -93,6 +93,21 @@ const mcpTools = [
 
   // ─── Data Tools ───
   {
+    id: 'text-input',
+    name: 'Text Input',
+    category: 'data',
+    icon: FileText,
+    premium: false,
+    description: 'Provide a static string or text value to start a workflow.',
+    inputs: [],
+    outputs: [
+      { id: 'text', name: 'Text', type: 'string' },
+    ],
+    configFields: [
+      { key: 'value', label: 'Value', type: 'textarea', default: 'Type your text here...' },
+    ],
+  },
+  {
     id: 'http-request',
     name: 'HTTP Request',
     category: 'data',
