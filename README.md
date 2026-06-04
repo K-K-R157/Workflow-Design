@@ -339,8 +339,8 @@ Workflow-Design/
 ## 👤 Author
 
 **Your Name**
-- GitHub: [@your_username](https://github.com/your_username)
-- LinkedIn: [your-linkedin](https://linkedin.com/in/your-linkedin)
+- GitHub: [KUNDAN KUMAR](https://github.com/your_username)
+- LinkedIn: [https://www.linkedin.com/in/kundan-kumar-27475927b/](https://linkedin.com/in/your-linkedin)
 
 ---
 
